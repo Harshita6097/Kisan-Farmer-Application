@@ -1,51 +1,154 @@
-# Kisan App Backend
+<div align="center">
 
-This is the Node.js + Express backend service for the Kisan App, providing real-time crop pricing, inventory tracking, predictive market analysis, and residue pickup management.
+# Kisan — Backend API
 
-## 🛠 Features & What Has Been Built
+**Node.js + Express REST API powering the Kisan farmer assistance platform.**
 
-### 1. Database & Schema Architecture (`/supabase/schema.sql`)
-The backend is seamlessly connected to a powerful Postgres architecture deployed on Supabase, featuring 3 primary tables:
-- **`mandi_prices`**: Fully indexed table that functions as a cache for Data.gov.in daily market rates.
-- **`user_stocks`**: Inventory management allowing users to track the purchase dates, prices, and volumes of their crops. 
-- **`residue_pickups`**: Waste management system enabling eco-friendly crop stubble pickup requests.
-*Row Level Security (RLS) has been configured to securely allow the frontend to access these tables from the `anon` key without relying on strict Service roles.*
+[![Node.js](https://img.shields.io/badge/Node.js-Express-339933?style=flat-square&logo=node.js)](https://nodejs.org)
+[![Supabase](https://img.shields.io/badge/Database-Supabase-3ECF8E?style=flat-square&logo=supabase)](https://supabase.com)
+[![data.gov.in](https://img.shields.io/badge/Data-data.gov.in-FF6B35?style=flat-square)](https://data.gov.in)
 
-### 2. Live Market APIs & Cron Syncing
-- Connected a robust integration with the **Data.gov.in API** (`DATA_GOV_API_KEY`).
-- Scripted an automated background worker (`node-cron`) to periodically scrape, analyze, and sink over 1500+ daily Mandi price records directly into Supabase (`GET /api/mandi-prices`).
-- Added a fast manual-trigger endpoint to initiate instant data-scraping batches (`POST /api/cron/fetch-prices`).
+</div>
 
-### 3. Price Prediction Engine (`/src/services/predictionService.js`)
-- Built a mathematical analysis algorithm using **Simple Moving Averages & Standard Deviation** to analyze 30 to 90-day historic Supabase price data.
-- The `/api/predictions/:commodity` endpoint dynamically predicts price trajectories, calculates market volatility, and automatically generates textual advice (e.g., *"Hold your stock for 2-3 weeks"*). 
-*(Note: Pluggable design ensures this can easily be replaced with a Python/ML model via OpenAI or Gemini in the future).*
+---
 
-### 4. Application REST Routes (`/src/routes/`)
-- Mapped Express routers for comprehensive CRUD support across all app features:
-  - `/api/stocks`: Adds, lists, deletes, and updates Farmer Inventories. Utilizes a temporary `mockAuth` identity router to bypass JWTs until the Mobile app writes an authentication flow.
-  - `/api/residue`: Allows logging crop stubble and tracking pickup status from the field (`/pickup` & `/requests`).
+## Overview
 
-## 🚀 How to Run Locally
+The backend handles live mandi price ingestion from [data.gov.in](https://data.gov.in), price trend prediction, crop stock inventory management, and residue pickup request tracking — all backed by a Supabase PostgreSQL database.
 
-### 1. Prerequisites 
-Ensure your `.env` is fully populated:
+---
+
+## Project Structure
+
+```
+app-backend/
+├── src/
+│   ├── config/
+│   │   └── supabase.js          # Supabase public + admin clients
+│   ├── cron/
+│   │   └── priceFetcher.js      # Daily price sync job
+│   ├── middleware/
+│   │   └── auth.js              # Supabase JWT verification
+│   ├── routes/
+│   │   ├── mandiPrices.js       # GET mandi prices
+│   │   ├── predictions.js       # GET price predictions
+│   │   ├── stocks.js            # CRUD crop inventory
+│   │   └── residue.js           # Residue pickup management
+│   └── services/
+│       ├── dataGovService.js    # data.gov.in API client
+│       └── predictionService.js # Moving average prediction engine
+├── supabase/
+│   └── schema.sql               # Full DB schema with RLS policies
+├── .env.example
+└── server.js                    # App entry point
+```
+
+---
+
+## API Reference
+
+### Mandi Prices
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/mandi-prices` | List prices with optional filters (`commodity`, `state`, `market`, `search`) |
+| `GET` | `/api/mandi-prices/commodities` | List all unique commodities in the database |
+| `GET` | `/api/mandi-prices/:commodity` | Prices for a specific commodity across all markets |
+
+### Price Predictions
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/predictions/:commodity` | Trend-based price forecast with risk level and sell/hold advice |
+
+### Stocks
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/stocks` | Get all stocks for the authenticated user |
+| `POST` | `/api/stocks` | Add a new stock entry |
+| `PUT` | `/api/stocks/:id` | Update an existing stock |
+| `DELETE` | `/api/stocks/:id` | Delete a stock entry |
+
+### Residue Pickups
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/residue/requests` | List all pickup requests |
+| `POST` | `/api/residue/pickup` | Book a new residue pickup |
+
+### Utility
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/health` | Server health check |
+| `POST` | `/api/cron/fetch-prices` | Manually trigger a mandi price sync |
+
+---
+
+## Database Schema
+
+Three tables in Supabase PostgreSQL, all with Row Level Security (RLS) enabled:
+
+| Table | Purpose |
+|---|---|
+| `mandi_prices` | Cached daily market prices from data.gov.in (unique on `commodity + market + arrival_date`) |
+| `user_stocks` | Per-user crop inventory with quantity, unit and purchase price |
+| `residue_pickups` | Eco-friendly crop residue pickup requests with status tracking |
+
+Run [`supabase/schema.sql`](supabase/schema.sql) in your Supabase SQL Editor to initialise the schema.
+
+---
+
+## Setup
+
+### 1. Configure environment variables
+
+```bash
+cp .env.example .env
+```
+
 ```env
 PORT=5000
-SUPABASE_URL=YOUR_SUPABASE_PROJECT_URL
-SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
-DATA_GOV_API_KEY=YOUR_DATAGOVIN_KEY
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+DATA_GOV_API_KEY=your-data-gov-api-key
 DATA_GOV_RESOURCE_ID=9ef84268-d588-465a-a308-a864a43d0070
 ```
 
-### 2. Start the Server
+### 2. Install dependencies and start
+
 ```bash
 npm install
-npm run dev
+npm run dev       # Development (nodemon)
+npm start         # Production
 ```
 
-### 3. Fetching Initial Market Data
-To seed your Supabase database with the market data right now, send a cURL or POST request inside Windows PowerShell to:
+### 3. Seed initial market data
+
 ```bash
+# Linux / macOS
+curl -X POST http://localhost:5000/api/cron/fetch-prices
+
+# Windows PowerShell
 Invoke-RestMethod -Method Post -Uri http://localhost:5000/api/cron/fetch-prices
 ```
+
+---
+
+## Scheduled Jobs
+
+The server runs a `node-cron` job every day at **8:00 AM IST** (02:30 UTC) to fetch and upsert up to 1,500 mandi price records from data.gov.in into Supabase.
+
+---
+
+## Prediction Engine
+
+`predictionService.js` uses a weighted moving average over 90 days of historical price data:
+
+- **Short-term trend** — last 7 entries vs. entries 8–30
+- **Long-term trend** — last 30 entries vs. entries 31–90
+- **Weighted forecast** — 70% short-term + 30% long-term
+- **Risk level** — derived from price standard deviation (volatility)
+- **Advice** — auto-generated sell/hold recommendation based on trend + risk
